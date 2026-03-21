@@ -21,7 +21,6 @@ void save_events_to_csv(std::ofstream &csv_file, const Metavision::EventCD *begi
 int main(int argc, char *argv[])
 {
   float duration_seconds = 1.0f;
-  const char *input_path = nullptr;
 
   for (int i = 1; i < argc; ++i)
   {
@@ -46,13 +45,9 @@ int main(int argc, char *argv[])
       std::cerr << "Unknown option: '" << argv[i] << "'. Supported option: -t <seconds>." << std::endl;
       return 1;
     }
-    else if (!input_path)
-    {
-      input_path = argv[i];
-    }
     else
     {
-      std::cerr << "Unexpected argument: '" << argv[i] << "'." << std::endl;
+      std::cerr << "Unexpected positional argument: '" << argv[i] << "'. Use -t <seconds>." << std::endl;
       return 1;
     }
   }
@@ -68,16 +63,8 @@ int main(int argc, char *argv[])
 
   csv_file << "timestamp,x,y,polarity\n";
 
-  if (input_path)
-  {
-    // if we passed an input file path, open it
-    cam = Metavision::Camera::from_file(input_path);
-  }
-  else
-  {
-    // open the first available camera
-    cam = Metavision::Camera::from_first_available();
-  }
+  // open the first available camera
+  cam = Metavision::Camera::from_first_available();
 
   // save incoming events to CSV
   cam.cd().add_callback([&csv_file](const Metavision::EventCD *begin, const Metavision::EventCD *end)
