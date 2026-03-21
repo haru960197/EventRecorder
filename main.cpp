@@ -1,7 +1,11 @@
 #include <metavision/sdk/stream/camera.h>
 #include <metavision/sdk/base/events/event_cd.h>
+#include <chrono>
+#include <cstring>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
+#include <thread>
 
 // this function will be associated to the camera callback
 void save_events_to_csv(std::ofstream &csv_file, const Metavision::EventCD *begin, const Metavision::EventCD *end)
@@ -16,6 +20,43 @@ void save_events_to_csv(std::ofstream &csv_file, const Metavision::EventCD *begi
 // main loop
 int main(int argc, char *argv[])
 {
+  float duration_seconds = 1.0f;
+  const char *input_path = nullptr;
+
+  for (int i = 1; i < argc; ++i)
+  {
+    if (std::strcmp(argv[i], "-t") == 0 || std::strcmp(argv[i], "--time") == 0)
+    {
+      if (i + 1 >= argc)
+      {
+        std::cerr << "Missing value for -t/--time option." << std::endl;
+        return 1;
+      }
+
+      char *end_ptr = nullptr;
+      duration_seconds = std::strtof(argv[++i], &end_ptr);
+      if (end_ptr == argv[i] || *end_ptr != '\0' || duration_seconds <= 0.0f)
+      {
+        std::cerr << "Invalid duration: '" << argv[i] << "'. Please provide a positive float in seconds." << std::endl;
+        return 1;
+      }
+    }
+    else if (argv[i][0] == '-')
+    {
+      std::cerr << "Unknown option: '" << argv[i] << "'. Supported option: -t <seconds>." << std::endl;
+      return 1;
+    }
+    else if (!input_path)
+    {
+      input_path = argv[i];
+    }
+    else
+    {
+      std::cerr << "Unexpected argument: '" << argv[i] << "'." << std::endl;
+      return 1;
+    }
+  }
+
   Metavision::Camera cam; // create the camera
   std::ofstream csv_file("events.csv");
 
@@ -27,10 +68,10 @@ int main(int argc, char *argv[])
 
   csv_file << "timestamp,x,y,polarity\n";
 
-  if (argc >= 2)
+  if (input_path)
   {
-    // if we passed a file path, open it
-    cam = Metavision::Camera::from_file(argv[1]);
+    // if we passed an input file path, open it
+    cam = Metavision::Camera::from_file(input_path);
   }
   else
   {
@@ -45,9 +86,20 @@ int main(int argc, char *argv[])
   // start the camera
   cam.start();
 
+  const auto start_time = std::chrono::steady_clock::now();
+  const auto max_duration = std::chrono::duration<float>(duration_seconds);
+
   // keep running while the camera is on or the recording is not finished
   while (cam.is_running())
   {
+    const auto elapsed = std::chrono::steady_clock::now() - start_time;
+    if (elapsed >= max_duration)
+    {
+      break;
+    }
+
+    // avoid a tight busy loop while waiting for the duration to elapse
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
   // the recording is finished, stop the camera.
