@@ -9,3 +9,7 @@ find_package(MetavisionSDK COMPONENTS core stream ui REQUIRED)
 set (sample event_recorder)
 add_executable(${sample} main.cpp)
 target_link_libraries(${sample} MetavisionSDK::core MetavisionSDK::stream MetavisionSDK::ui)
+
+set (bench_sample camera_bench)
+add_executable(${bench_sample} scripts/camera-bench.cpp)
+target_link_libraries(${bench_sample} MetavisionSDK::core MetavisionSDK::stream MetavisionSDK::ui)
