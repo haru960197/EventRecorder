@@ -28,3 +28,13 @@ cmake --build . --config Release
 # same as above
 ./event_recorder --time 1.8
 ```
+
+Output file: `events.raw` (EVT3 format)
+
+### 4. Decode the output file
+
+```bash
+metavision_evt3_raw_file_decoder /path/to/input.raw /path/to/output.csv
+```
+
+Other decoders are here. [PROPHESEE Encoder/Decoder samples](https://docs.prophesee.ai/stable/samples/standalone.html)
