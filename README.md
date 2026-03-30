@@ -38,3 +38,12 @@ metavision_evt3_raw_file_decoder /path/to/input.raw /path/to/output.csv
 ```
 
 Other decoders are here. [PROPHESEE Encoder/Decoder samples](https://docs.prophesee.ai/stable/samples/standalone.html)
+
+## Notes
+
+This repository is developed with reference to PROPHESEE's SDK, official documentation, and related public resources.
+
+Referenced resources:
+
+- https://docs.prophesee.ai/stable/get_started/get_started_cpp.html
+- https://github.com/prophesee-ai/openeb
