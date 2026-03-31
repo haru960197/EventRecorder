@@ -37,6 +37,20 @@ Output file: `events.raw` (EVT3 format)
 metavision_evt3_raw_file_decoder /path/to/input.raw /path/to/output.csv
 ```
 
+If you get like "Unknown command: metavision_evt3_raw_file_decoder", you have to compile the code first.
+
+[Compiling C++ code samples](https://docs.prophesee.ai/stable/samples/compilation/compilation.html#chapter-samples-cpp-compilation)
+
+1. `$ cd ~`
+2. `$ cp -r /usr/local/share/metavision/standalone_samples/metavision_evt3_raw_file_decoder ~/`
+3. `$ mkdir build && cd build`
+4. `$ cmake .. -DCMAKE_BUILD_TYPE=Release`
+5. `$ cmake --build . --config Release`
+
+Finally, you can move the exe file to bin directory.
+`$ sudo cp ./metavision_evt3_raw_file_decoder /usr/local/bin/`
+
+
 Other decoders are here. [PROPHESEE Encoder/Decoder samples](https://docs.prophesee.ai/stable/samples/standalone.html)
 
 ## Notes
