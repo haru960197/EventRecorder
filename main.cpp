@@ -52,6 +52,7 @@ int main(int argc, char *argv[])
 
   // start the camera
   cam.start();
+  std::cout << "[INFO] Recording started." << std::endl;
 
   const auto start_time = std::chrono::steady_clock::now();
   const auto max_duration = std::chrono::duration<float>(duration_seconds);
@@ -73,4 +74,5 @@ int main(int argc, char *argv[])
   // Note: we will never get here with a live camera
   cam.stop();
   cam.stop_recording();
+  std::cout << "[INFO] Recording finished." << std::endl;
 }
