@@ -13,3 +13,7 @@ target_link_libraries(${sample} MetavisionSDK::core MetavisionSDK::stream Metavi
 set (bench_sample camera_bench)
 add_executable(${bench_sample} scripts/camera-bench.cpp)
 target_link_libraries(${bench_sample} MetavisionSDK::core MetavisionSDK::stream MetavisionSDK::ui)
+
+set (player_sample events_player)
+add_executable(${player_sample} scripts/events-player.cpp)
+target_link_libraries(${player_sample} MetavisionSDK::core MetavisionSDK::stream MetavisionSDK::ui)
