@@ -2,8 +2,32 @@
 #include <chrono>
 #include <cstring>
 #include <cstdlib>
+#include <filesystem>
 #include <iostream>
 #include <thread>
+
+namespace {
+
+std::filesystem::path resolve_camera_settings_path()
+{
+  const std::filesystem::path candidates[] = {
+      "config/camera_settings.json",
+      "../config/camera_settings.json",
+      "../../config/camera_settings.json",
+  };
+
+  for (const auto &candidate : candidates)
+  {
+    if (std::filesystem::exists(candidate))
+    {
+      return candidate;
+    }
+  }
+
+  return candidates[0];
+}
+
+} // namespace
 
 // main loop
 int main(int argc, char *argv[])
@@ -46,6 +70,21 @@ int main(int argc, char *argv[])
   Metavision::DeviceConfig device_config;
   device_config.set_format("EVT3");
   cam = Metavision::Camera::from_first_available(device_config);
+
+  const auto camera_settings_path = resolve_camera_settings_path();
+  if (!std::filesystem::exists(camera_settings_path))
+  {
+    std::cerr << "Camera settings file not found: " << camera_settings_path << std::endl;
+    return 1;
+  }
+
+  if (!cam.load(camera_settings_path))
+  {
+    std::cerr << "Failed to load camera settings from: " << camera_settings_path << std::endl;
+    return 1;
+  }
+
+  std::cout << "[INFO] Loaded camera settings from " << camera_settings_path << std::endl;
 
   // record incoming events to RAW
   cam.start_recording("events.raw");
