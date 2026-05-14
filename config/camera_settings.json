@@ -1,0 +1,7 @@
+{
+ "event_trail_filter_state": {
+  "enabled": true,
+  "filtering_type": "STC_CUT_TRAIL",
+  "threshold": 10000
+ }
+}
