@@ -20,3 +20,9 @@
 /*.dylib
 /*.dll
 /*.exe
+
+# Recording output
+*.raw
+
+# Hot pixel calibration data (machine-specific)
+config/hot_pixels.json
