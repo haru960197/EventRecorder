@@ -340,6 +340,13 @@ int main(int argc, char *argv[])
     }
   }
 
+  // ---- Camera setup and recording ----
+  Metavision::Camera cam;
+
+  Metavision::DeviceConfig device_config;
+  device_config.set_format("EVT3");
+  cam = Metavision::Camera::from_first_available(device_config);
+
   // ---- Hot pixel masking (V4L2 direct) ----
   if (mask_hotpixels)
   {
@@ -377,13 +384,6 @@ int main(int argc, char *argv[])
     }
 #endif
   }
-
-  // ---- Camera setup and recording ----
-  Metavision::Camera cam;
-
-  Metavision::DeviceConfig device_config;
-  device_config.set_format("EVT3");
-  cam = Metavision::Camera::from_first_available(device_config);
 
   cam.start_recording("events.raw");
 
