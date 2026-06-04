@@ -1,4 +1,3 @@
-#include <metavision/sdk/stream/camera.h>
 #include <chrono>
 #include <cstring>
 #include <cstdlib>
@@ -8,6 +7,15 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <atomic>
+
+// Metavision HAL headers
+#include <metavision/hal/device/device.h>
+#include <metavision/hal/device/device_discovery.h>
+#include <metavision/hal/utils/device_config.h>
+#include <metavision/hal/facilities/i_events_stream.h>
+#include <metavision/hal/facilities/i_events_stream_decoder.h>
+#include <metavision/hal/facilities/i_geometry.h>
 
 #ifdef __linux__
 #include <dirent.h>
@@ -287,6 +295,7 @@ static void print_usage(const char *prog)
             << "\n"
             << "Options:\n"
             << "  -t, --time <seconds>     Recording duration in seconds (default: 1.0)\n"
+            << "  -o, --output <file>      Output RAW file path (default: events.raw)\n"
             << "  -m, --mask-hotpixels     Disable hot pixels before recording\n"
             << "                           (requires config/hot_pixels.json)\n"
             << "  -h, --help               Show this help message\n"
@@ -300,6 +309,7 @@ int main(int argc, char *argv[])
 {
   float duration_seconds = 1.0f;
   bool mask_hotpixels = false;
+  std::string output_path = "events.raw";
 
   for (int i = 1; i < argc; ++i)
   {
@@ -318,6 +328,15 @@ int main(int argc, char *argv[])
         std::cerr << "Invalid duration: '" << argv[i] << "'. Please provide a positive float in seconds." << std::endl;
         return 1;
       }
+    }
+    else if (std::strcmp(argv[i], "-o") == 0 || std::strcmp(argv[i], "--output") == 0)
+    {
+      if (i + 1 >= argc)
+      {
+        std::cerr << "Missing value for -o/--output option." << std::endl;
+        return 1;
+      }
+      output_path = argv[++i];
     }
     else if (std::strcmp(argv[i], "-m") == 0 || std::strcmp(argv[i], "--mask-hotpixels") == 0)
     {
@@ -340,19 +359,45 @@ int main(int argc, char *argv[])
     }
   }
 
-  // ---- 1. Camera setup and recording ----
-  Metavision::Camera cam;
-
+  // ---- 1. Open device via Metavision HAL (no Camera class) ----
+  std::cout << "[INFO] Opening camera via Metavision HAL..." << std::endl;
   Metavision::DeviceConfig device_config;
-  device_config.set_format("EVT3");
-  cam = Metavision::Camera::from_first_available(device_config);
+  device_config.enable_biases_range_check_bypass(true);
 
-  // ---- 2. 録画とストリームを開始する ----
-  cam.start_recording("events.raw");
-  cam.start();
-  std::cout << "[INFO] Recording started." << std::endl;
+  std::unique_ptr<Metavision::Device> device;
+  try
+  {
+    device = Metavision::DeviceDiscovery::open("", device_config);
+  }
+  catch (const std::exception &e)
+  {
+    std::cerr << "[ERROR] Exception during device discovery: " << e.what() << std::endl;
+    return 1;
+  }
 
-  // ---- 3. 【ここに移動】すべての準備が整った直後に、上からマスクを適用する ----
+  if (!device)
+  {
+    std::cerr << "[ERROR] Failed to open camera via Metavision HAL." << std::endl;
+    return 1;
+  }
+  std::cout << "[INFO] Camera successfully opened via HAL." << std::endl;
+
+  // Obtain HAL facilities
+  auto *i_events_stream = device->get_facility<Metavision::I_EventsStream>();
+  auto *i_stream_decoder = device->get_facility<Metavision::I_EventsStreamDecoder>();
+  auto *i_geometry = device->get_facility<Metavision::I_Geometry>();
+
+  if (!i_events_stream)
+  {
+    std::cerr << "[ERROR] I_EventsStream facility not available." << std::endl;
+    return 1;
+  }
+
+  int sensor_width = i_geometry ? i_geometry->get_width() : 320;
+  int sensor_height = i_geometry ? i_geometry->get_height() : 320;
+  std::cout << "[INFO] Sensor geometry: " << sensor_width << " x " << sensor_height << std::endl;
+
+  // ---- 2. Apply hot pixel mask via V4L2 (before starting stream) ----
   if (mask_hotpixels)
   {
 #ifndef __linux__
@@ -367,7 +412,6 @@ int main(int argc, char *argv[])
       return 1;
     }
 
-    // ここで変数を定義して JSON をロードします（スコープエラーの解消）
     std::vector<std::pair<int, int>> hot_pixels;
     if (!load_hot_pixels(config_path, hot_pixels))
     {
@@ -381,7 +425,6 @@ int main(int argc, char *argv[])
     }
     else
     {
-      // センサーがすでにアクティブなので、確実にレジスタに書き込まれる
       if (!apply_hotpixel_mask(hot_pixels))
       {
         std::cerr << "[ERROR] Failed to apply hot pixel mask. Aborting." << std::endl;
@@ -391,22 +434,79 @@ int main(int argc, char *argv[])
 #endif
   }
 
-  // ---- 4. ループと録画処理 ----
+  // ---- 3. Open output file for RAW recording ----
+  std::ofstream raw_file(output_path, std::ios::binary | std::ios::trunc);
+  if (!raw_file.is_open())
+  {
+    std::cerr << "[ERROR] Failed to open output file: " << output_path << std::endl;
+    return 1;
+  }
+  std::cout << "[INFO] Recording RAW data to: " << output_path << std::endl;
+
+  // ---- 4. Start event stream ----
+  i_events_stream->start();
+  std::cout << "[INFO] Event stream started. Recording for "
+            << duration_seconds << " second(s)..." << std::endl;
+
+  // ---- 5. Decode loop: poll, get raw data, write to file ----
   const auto start_time = std::chrono::steady_clock::now();
   const auto max_duration = std::chrono::duration<float>(duration_seconds);
+  std::atomic<bool> running{true};
+  size_t total_bytes_written = 0;
+  size_t packet_count = 0;
 
-  while (cam.is_running())
+  while (running.load())
   {
+    // Check elapsed time
     const auto elapsed = std::chrono::steady_clock::now() - start_time;
     if (elapsed >= max_duration)
     {
       break;
     }
 
-    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    // Poll for available data
+    short status = i_events_stream->poll_buffer();
+    if (status < 0)
+    {
+      std::cerr << "[WARN] Event stream ended unexpectedly (poll returned " << status << ")." << std::endl;
+      break;
+    }
+
+    if (status > 0)
+    {
+      // Retrieve the latest raw data buffer
+      auto raw_data = i_events_stream->get_latest_raw_data();
+      if (raw_data)
+      {
+        const auto *data_ptr = raw_data.data();
+        const size_t data_size = raw_data.size();
+
+        if (data_ptr && data_size > 0)
+        {
+          // Write raw packet directly to file
+          raw_file.write(reinterpret_cast<const char *>(data_ptr), data_size);
+          total_bytes_written += data_size;
+          ++packet_count;
+        }
+
+        // Also decode (optional: keeps internal state consistent)
+        if (i_stream_decoder)
+        {
+          i_stream_decoder->decode(raw_data);
+        }
+      }
+    }
   }
 
-  cam.stop();
-  cam.stop_recording();
+  // ---- 6. Stop stream and close file ----
+  i_events_stream->stop();
+  raw_file.close();
+
   std::cout << "[INFO] Recording finished." << std::endl;
+  std::cout << "[INFO] Total packets: " << packet_count << std::endl;
+  std::cout << "[INFO] Total bytes written: " << total_bytes_written
+            << " (" << (total_bytes_written / 1024.0 / 1024.0) << " MB)" << std::endl;
+  std::cout << "[INFO] Output file: " << output_path << std::endl;
+
+  return 0;
 }

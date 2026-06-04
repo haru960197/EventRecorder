@@ -4,11 +4,12 @@ project(event_recorder)
 
 set(CMAKE_CXX_STANDARD 17)
 
+find_package(MetavisionHAL REQUIRED)
 find_package(MetavisionSDK COMPONENTS core stream ui REQUIRED)
 
 set (sample event_recorder)
 add_executable(${sample} main.cpp)
-target_link_libraries(${sample} MetavisionSDK::core MetavisionSDK::stream MetavisionSDK::ui)
+target_link_libraries(${sample} Metavision::HAL Metavision::HAL_discovery MetavisionSDK::base)
 
 set (bench_sample camera_bench)
 add_executable(${bench_sample} scripts/camera-bench.cpp)
