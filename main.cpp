@@ -340,14 +340,19 @@ int main(int argc, char *argv[])
     }
   }
 
-  // ---- Camera setup and recording ----
+  // ---- 1. Camera setup and recording ----
   Metavision::Camera cam;
 
   Metavision::DeviceConfig device_config;
   device_config.set_format("EVT3");
   cam = Metavision::Camera::from_first_available(device_config);
 
-  // ---- Hot pixel masking (V4L2 direct) ----
+  // ---- 2. 録画とストリームを開始する ----
+  cam.start_recording("events.raw");
+  cam.start();
+  std::cout << "[INFO] Recording started." << std::endl;
+
+  // ---- 3. 【ここに移動】すべての準備が整った直後に、上からマスクを適用する ----
   if (mask_hotpixels)
   {
 #ifndef __linux__
@@ -358,11 +363,11 @@ int main(int argc, char *argv[])
     if (config_path.empty())
     {
       std::cerr << "[ERROR] Hot pixel config not found." << std::endl;
-      std::cerr << "        Expected: config/hot_pixels.json" << std::endl;
-      std::cerr << "        Run scripts/calibrate_hot_pixels.sh to generate it." << std::endl;
+      std::cerr << "         Expected: config/hot_pixels.json" << std::endl;
       return 1;
     }
 
+    // ここで変数を定義して JSON をロードします（スコープエラーの解消）
     std::vector<std::pair<int, int>> hot_pixels;
     if (!load_hot_pixels(config_path, hot_pixels))
     {
@@ -376,6 +381,7 @@ int main(int argc, char *argv[])
     }
     else
     {
+      // センサーがすでにアクティブなので、確実にレジスタに書き込まれる
       if (!apply_hotpixel_mask(hot_pixels))
       {
         std::cerr << "[ERROR] Failed to apply hot pixel mask. Aborting." << std::endl;
@@ -385,11 +391,7 @@ int main(int argc, char *argv[])
 #endif
   }
 
-  cam.start_recording("events.raw");
-
-  cam.start();
-  std::cout << "[INFO] Recording started." << std::endl;
-
+  // ---- 4. ループと録画処理 ----
   const auto start_time = std::chrono::steady_clock::now();
   const auto max_duration = std::chrono::duration<float>(duration_seconds);
 
