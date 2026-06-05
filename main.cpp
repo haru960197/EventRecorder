@@ -397,7 +397,8 @@ int main(int argc, char *argv[])
   int sensor_height = i_geometry ? i_geometry->get_height() : 320;
   std::cout << "[INFO] Sensor geometry: " << sensor_width << " x " << sensor_height << std::endl;
 
-  // ---- 2. Apply hot pixel mask via V4L2 (before starting stream) ----
+  // ---- 2. Load hot pixel mask (to be applied dynamically later) ----
+  std::vector<std::pair<int, int>> hot_pixels;
   if (mask_hotpixels)
   {
 #ifndef __linux__
@@ -412,7 +413,6 @@ int main(int argc, char *argv[])
       return 1;
     }
 
-    std::vector<std::pair<int, int>> hot_pixels;
     if (!load_hot_pixels(config_path, hot_pixels))
     {
       std::cerr << "[ERROR] Failed to load hot pixel data from: " << config_path << std::endl;
@@ -422,14 +422,6 @@ int main(int argc, char *argv[])
     if (hot_pixels.empty())
     {
       std::cout << "[INFO] No hot pixels found in config. Proceeding without masking." << std::endl;
-    }
-    else
-    {
-      if (!apply_hotpixel_mask(hot_pixels))
-      {
-        std::cerr << "[ERROR] Failed to apply hot pixel mask. Aborting." << std::endl;
-        return 1;
-      }
     }
 #endif
   }
@@ -445,25 +437,21 @@ int main(int argc, char *argv[])
 
   // ---- 4. Start event stream ----
   i_events_stream->start();
-  std::cout << "[INFO] Event stream started. Recording for "
-            << duration_seconds << " second(s)..." << std::endl;
 
-  // ---- 5. Decode loop: poll, get raw data, write to file ----
+  // ---- 5. Recording loop ----
   const auto start_time = std::chrono::steady_clock::now();
-  const auto max_duration = std::chrono::duration<float>(duration_seconds);
+  
+  bool mask_applied = false;
+  bool mask_cleared = false;
   std::atomic<bool> running{true};
   size_t total_bytes_written = 0;
   size_t packet_count = 0;
 
+  std::cout << "[INFO] Recording started (Total 15 seconds)..." << std::endl;
+  std::cout << "[PHASE 1] 0-5s: Normal state (No Mask)" << std::endl;
+
   while (running.load())
   {
-    // Check elapsed time
-    const auto elapsed = std::chrono::steady_clock::now() - start_time;
-    if (elapsed >= max_duration)
-    {
-      break;
-    }
-
     // Poll for available data
     short status = i_events_stream->poll_buffer();
     if (status < 0)
@@ -496,6 +484,48 @@ int main(int argc, char *argv[])
         }
       }
     }
+
+    // 経過時間の計算
+    const auto elapsed = std::chrono::steady_clock::now() - start_time;
+    float seconds = std::chrono::duration<float>(elapsed).count();
+
+    // 【5秒経過】ホットピクセルマスクを動的に適用
+    if (seconds >= 5.0f && seconds < 10.0f && !mask_applied)
+    {
+      std::cout << "\n[PHASE 2] 5-10s: Dynamic Hotpixel Mask ON!" << std::endl;
+      // 事前にロードしておいたホットピクセルリストをここで上書き適用
+#ifdef __linux__
+      if (mask_hotpixels)
+      {
+        apply_hotpixel_mask(hot_pixels); 
+      }
+#endif
+      mask_applied = true;
+    }
+
+    // 【10秒経過】マスクを解除（全ピクセルを1にしたgridを書き込んでクリア）
+    if (seconds >= 10.0f && !mask_cleared)
+    {
+      std::cout << "\n[PHASE 3] 10-15s: Dynamic Hotpixel Mask OFF (Back to Normal)" << std::endl;
+      
+#ifdef __linux__
+      if (mask_hotpixels)
+      {
+        // 空の（全画素有効の）リストを渡して、マスクを消去する
+        std::vector<std::pair<int, int>> empty_list; 
+        apply_hotpixel_mask(empty_list); 
+      }
+#endif
+      mask_cleared = true;
+    }
+
+    // 15秒経過したら終了
+    if (seconds >= 15.0f)
+    {
+      break;
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
   // ---- 6. Stop stream and close file ----
