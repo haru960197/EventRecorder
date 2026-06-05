@@ -294,10 +294,7 @@ static void print_usage(const char *prog)
   std::cout << "Usage: " << prog << " [OPTIONS]\n"
             << "\n"
             << "Options:\n"
-            << "  -t, --time <seconds>     Recording duration in seconds (default: 1.0)\n"
             << "  -o, --output <file>      Output RAW file path (default: events.raw)\n"
-            << "  -m, --mask-hotpixels     Disable hot pixels before recording\n"
-            << "                           (requires config/hot_pixels.json)\n"
             << "  -h, --help               Show this help message\n"
             << std::endl;
 }
@@ -307,29 +304,11 @@ static void print_usage(const char *prog)
 // ============================================================
 int main(int argc, char *argv[])
 {
-  float duration_seconds = 1.0f;
-  bool mask_hotpixels = false;
   std::string output_path = "events.raw";
 
   for (int i = 1; i < argc; ++i)
   {
-    if (std::strcmp(argv[i], "-t") == 0 || std::strcmp(argv[i], "--time") == 0)
-    {
-      if (i + 1 >= argc)
-      {
-        std::cerr << "Missing value for -t/--time option." << std::endl;
-        return 1;
-      }
-
-      char *end_ptr = nullptr;
-      duration_seconds = std::strtof(argv[++i], &end_ptr);
-      if (end_ptr == argv[i] || *end_ptr != '\0' || duration_seconds <= 0.0f)
-      {
-        std::cerr << "Invalid duration: '" << argv[i] << "'. Please provide a positive float in seconds." << std::endl;
-        return 1;
-      }
-    }
-    else if (std::strcmp(argv[i], "-o") == 0 || std::strcmp(argv[i], "--output") == 0)
+    if (std::strcmp(argv[i], "-o") == 0 || std::strcmp(argv[i], "--output") == 0)
     {
       if (i + 1 >= argc)
       {
@@ -337,10 +316,6 @@ int main(int argc, char *argv[])
         return 1;
       }
       output_path = argv[++i];
-    }
-    else if (std::strcmp(argv[i], "-m") == 0 || std::strcmp(argv[i], "--mask-hotpixels") == 0)
-    {
-      mask_hotpixels = true;
     }
     else if (std::strcmp(argv[i], "-h") == 0 || std::strcmp(argv[i], "--help") == 0)
     {
@@ -399,32 +374,29 @@ int main(int argc, char *argv[])
 
   // ---- 2. Load hot pixel mask (to be applied dynamically later) ----
   std::vector<std::pair<int, int>> hot_pixels;
-  if (mask_hotpixels)
-  {
 #ifndef __linux__
-    std::cerr << "[ERROR] Hot pixel masking is only supported on Linux (V4L2)." << std::endl;
-    return 1;
+  std::cerr << "[WARN] Hot pixel masking is only supported on Linux (V4L2)." << std::endl;
 #else
-    std::string config_path = resolve_config_path(argv[0]);
-    if (config_path.empty())
+  std::string config_path = resolve_config_path(argv[0]);
+  if (!config_path.empty())
+  {
+    if (load_hot_pixels(config_path, hot_pixels))
     {
-      std::cerr << "[ERROR] Hot pixel config not found." << std::endl;
-      std::cerr << "         Expected: config/hot_pixels.json" << std::endl;
-      return 1;
+      if (hot_pixels.empty())
+      {
+        std::cout << "[INFO] Hot pixel config loaded, but it is empty." << std::endl;
+      }
     }
-
-    if (!load_hot_pixels(config_path, hot_pixels))
+    else
     {
-      std::cerr << "[ERROR] Failed to load hot pixel data from: " << config_path << std::endl;
-      return 1;
+      std::cerr << "[WARN] Failed to load hot pixel data from: " << config_path << std::endl;
     }
-
-    if (hot_pixels.empty())
-    {
-      std::cout << "[INFO] No hot pixels found in config. Proceeding without masking." << std::endl;
-    }
-#endif
   }
+  else
+  {
+    std::cerr << "[WARN] Hot pixel config not found (config/hot_pixels.json). PHASE 2 will not apply any mask." << std::endl;
+  }
+#endif
 
   // ---- 3. Open output file for RAW recording ----
   std::ofstream raw_file(output_path, std::ios::binary | std::ios::trunc);
@@ -495,9 +467,13 @@ int main(int argc, char *argv[])
       std::cout << "\n[PHASE 2] 5-10s: Dynamic Hotpixel Mask ON!" << std::endl;
       // 事前にロードしておいたホットピクセルリストをここで上書き適用
 #ifdef __linux__
-      if (mask_hotpixels)
+      if (!hot_pixels.empty())
       {
         apply_hotpixel_mask(hot_pixels); 
+      }
+      else
+      {
+        std::cout << "[WARN] Masking skipped (no hot pixels loaded)" << std::endl;
       }
 #endif
       mask_applied = true;
@@ -509,11 +485,15 @@ int main(int argc, char *argv[])
       std::cout << "\n[PHASE 3] 10-15s: Dynamic Hotpixel Mask OFF (Back to Normal)" << std::endl;
       
 #ifdef __linux__
-      if (mask_hotpixels)
+      if (!hot_pixels.empty())
       {
         // 空の（全画素有効の）リストを渡して、マスクを消去する
         std::vector<std::pair<int, int>> empty_list; 
         apply_hotpixel_mask(empty_list); 
+      }
+      else
+      {
+        std::cout << "[INFO] Mask clear skipped (no mask was applied)" << std::endl;
       }
 #endif
       mask_cleared = true;
