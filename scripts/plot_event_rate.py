@@ -10,13 +10,17 @@ Reads a CSV event file in the format produced by metavision_evt3_raw_file_decode
 Calculates the number of events per time window (default: 100 ms) and plots
 the event rate over time as a line graph.
 
-By default, if the recording is ~15 seconds or ~90 seconds long (matching the
-event_recorder duration), the script automatically highlights the three
-dynamic masking phases:
+By default, if the recording is ~15 seconds, ~40 seconds or ~90 seconds long
+(matching the event_recorder duration), the script automatically highlights
+the three dynamic masking phases:
   - For ~15s recording:
     - Phase 1 (0–5s): Mask OFF (Normal state)
     - Phase 2 (5–10s): Mask ON (Hot pixel mask applied)
     - Phase 3 (10–15s): Mask OFF (Mask cleared)
+  - For ~40s recording:
+    - Phase 1 (0–5s): Mask OFF (Normal state)
+    - Phase 2 (5–35s): Mask ON (Hot pixel mask applied)
+    - Phase 3 (35–40s): Mask OFF (Mask cleared)
   - For ~90s recording:
     - Phase 1 (0–30s): Mask OFF (Normal state)
     - Phase 2 (30–60s): Mask ON (Hot pixel mask applied)
@@ -270,24 +274,28 @@ def plot_event_rate(
     # --- Phase shading ---
     max_time = times[-1] if len(times) > 0 else 0.0
     should_draw = False
-    phase_duration = 5.0  # Default fallback duration
+    p1, p2, p3 = None, None, None
 
     if draw_phases == "auto":
         if 12.0 <= max_time <= 18.0:
             should_draw = True
-            phase_duration = 5.0
+            p1, p2, p3 = 5.0, 10.0, 15.0
+        elif 35.0 <= max_time <= 45.0:
+            should_draw = True
+            p1, p2, p3 = 5.0, 35.0, 40.0
         elif 80.0 <= max_time <= 100.0:
             should_draw = True
-            phase_duration = 30.0
+            p1, p2, p3 = 30.0, 60.0, 90.0
     elif draw_phases == "true":
         should_draw = True
-        phase_duration = 30.0 if max_time > 40.0 else 5.0
+        if max_time > 80.0:
+            p1, p2, p3 = 30.0, 60.0, 90.0
+        elif max_time > 35.0:
+            p1, p2, p3 = 5.0, 35.0, 40.0
+        else:
+            p1, p2, p3 = 5.0, 10.0, 15.0
 
-    if should_draw:
-        p1 = phase_duration
-        p2 = phase_duration * 2.0
-        p3 = phase_duration * 3.0
-        
+    if should_draw and p1 is not None and p2 is not None and p3 is not None:
         print(f"[INFO] Adding shaded regions for 3-phase masking (0-{p1:.0f}s / {p1:.0f}-{p2:.0f}s / {p2:.0f}-{p3:.0f}s).")
         ax.axvspan(0,  p1,              color="#EE6677", alpha=0.08,
                    label="Phase 1: Normal (Mask OFF)")
@@ -367,7 +375,7 @@ CSV format (produced by metavision_evt3_raw_file_decoder):
         default="auto",
         help=(
             "Overlay 3-phase masking regions. "
-            "'auto' draws them when file duration is ~15 s or ~90 s."
+            "'auto' draws them when file duration is ~15 s, ~40 s, or ~90 s."
         ),
     )
     parser.add_argument(
