@@ -92,6 +92,60 @@ Finally, you can move the exe file to bin directory.
 
 Other decoders are here. [PROPHESEE Encoder/Decoder samples](https://docs.prophesee.ai/stable/samples/standalone.html)
 
+### 6. Event Rate Analysis
+
+You can decode the recorded `.raw` file to CSV and then plot the event rate (events per 100 ms) over time using a Python script.
+
+#### Step 1 – Decode RAW to CSV
+
+Use the `metavision_evt3_raw_file_decoder` tool to convert the recording to CSV:
+
+```bash
+metavision_evt3_raw_file_decoder events.raw events.csv
+```
+
+The output CSV has the following format:
+
+```
+%geometry:width,height
+x,y,polarity,timestamp_µs
+...
+```
+
+#### Step 2 – Python Environment Setup
+
+```bash
+# 1. Navigate to the EventRecorder directory
+cd EventRecorder
+
+# 2. Create a virtual environment
+python3 -m venv .venv
+
+# 3. Activate the virtual environment
+source .venv/bin/activate
+
+# 4. Install required packages
+pip install -r requirements.txt
+```
+
+#### Step 3 – Run the Analysis Script
+
+```bash
+# Analyze events.csv and save the plot to event_rate.png
+python3 scripts/plot_event_rate.py events.csv -o event_rate.png
+```
+
+##### Command Options:
+- `input` (positional): Path to the input `.csv` event file (default: `events.csv`).
+- `-o, --output`: Path to save the generated PNG plot (default: `event_rate.png`).
+- `-d, --delta-t MS`: Bin size in milliseconds (default: `100` ms).
+- `--draw-phases {auto,true,false}`: Whether to overlay shaded regions for the 3-phase dynamic masking protocol.
+  - `auto` (default): Automatically drawn when the file duration is ~15 seconds.
+  - `true`: Always draw phase regions.
+  - `false`: Disable phase overlay.
+- `--title TEXT`: Custom main title for the plot.
+- `--dpi N`: Output image resolution (default: `300`).
+
 ## Notes
 
 This repository is developed with reference to PROPHESEE's SDK, official documentation, and related public resources.

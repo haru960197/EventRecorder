@@ -1,6 +1,7 @@
 # Build directories
 /build/
 /cmake-build-*/
+/.venv/
 
 # CMake generated files (in-source build protection)
 /CMakeFiles/
@@ -23,6 +24,8 @@
 
 # Recording output
 *.raw
+*.csv
+*.png
 
 # Hot pixel calibration data (machine-specific)
 config/hot_pixels.json
