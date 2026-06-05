@@ -419,7 +419,7 @@ int main(int argc, char *argv[])
   size_t total_bytes_written = 0;
   size_t packet_count = 0;
 
-  std::cout << "[INFO] Recording started (Total 15 seconds)..." << std::endl;
+  std::cout << "[INFO] Recording started (Total 40 seconds)..." << std::endl;
   std::cout << "[PHASE 1] 0-5s: Normal state (No Mask)" << std::endl;
 
   while (running.load())
@@ -462,9 +462,9 @@ int main(int argc, char *argv[])
     float seconds = std::chrono::duration<float>(elapsed).count();
 
     // 【5秒経過】ホットピクセルマスクを動的に適用
-    if (seconds >= 5.0f && seconds < 10.0f && !mask_applied)
+    if (seconds >= 5.0f && seconds < 35.0f && !mask_applied)
     {
-      std::cout << "\n[PHASE 2] 5-10s: Dynamic Hotpixel Mask ON!" << std::endl;
+      std::cout << "\n[PHASE 2] 5-35s: Dynamic Hotpixel Mask ON!" << std::endl;
       // 事前にロードしておいたホットピクセルリストをここで上書き適用
 #ifdef __linux__
       if (!hot_pixels.empty())
@@ -479,10 +479,10 @@ int main(int argc, char *argv[])
       mask_applied = true;
     }
 
-    // 【10秒経過】マスクを解除（全ピクセルを1にしたgridを書き込んでクリア）
-    if (seconds >= 10.0f && !mask_cleared)
+    // 【35秒経過】マスクを解除（全ピクセルを1にしたgridを書き込んでクリア）
+    if (seconds >= 35.0f && !mask_cleared)
     {
-      std::cout << "\n[PHASE 3] 10-15s: Dynamic Hotpixel Mask OFF (Back to Normal)" << std::endl;
+      std::cout << "\n[PHASE 3] 35-40s: Dynamic Hotpixel Mask OFF (Back to Normal)" << std::endl;
       
 #ifdef __linux__
       if (!hot_pixels.empty())
@@ -499,8 +499,8 @@ int main(int argc, char *argv[])
       mask_cleared = true;
     }
 
-    // 15秒経過したら終了
-    if (seconds >= 15.0f)
+    // 40秒経過したら終了
+    if (seconds >= 40.0f)
     {
       break;
     }

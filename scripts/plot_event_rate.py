@@ -10,11 +10,17 @@ Reads a CSV event file in the format produced by metavision_evt3_raw_file_decode
 Calculates the number of events per time window (default: 100 ms) and plots
 the event rate over time as a line graph.
 
-By default, if the recording is ~15 seconds long (matching the event_recorder
-duration), the script automatically highlights the three dynamic masking phases:
-  - Phase 1 (0–5s): Mask OFF (Normal state)
-  - Phase 2 (5–10s): Mask ON (Hot pixel mask applied)
-  - Phase 3 (10–15s): Mask OFF (Mask cleared)
+By default, if the recording is ~15 seconds or ~90 seconds long (matching the
+event_recorder duration), the script automatically highlights the three
+dynamic masking phases:
+  - For ~15s recording:
+    - Phase 1 (0–5s): Mask OFF (Normal state)
+    - Phase 2 (5–10s): Mask ON (Hot pixel mask applied)
+    - Phase 3 (10–15s): Mask OFF (Mask cleared)
+  - For ~90s recording:
+    - Phase 1 (0–30s): Mask OFF (Normal state)
+    - Phase 2 (30–60s): Mask ON (Hot pixel mask applied)
+    - Phase 3 (60–90s): Mask OFF (Mask cleared)
 
 Usage:
     python3 scripts/plot_event_rate.py events.csv -o event_rate.png
@@ -264,32 +270,44 @@ def plot_event_rate(
     # --- Phase shading ---
     max_time = times[-1] if len(times) > 0 else 0.0
     should_draw = False
+    phase_duration = 5.0  # Default fallback duration
+
     if draw_phases == "auto":
-        should_draw = 12.0 <= max_time <= 18.0
+        if 12.0 <= max_time <= 18.0:
+            should_draw = True
+            phase_duration = 5.0
+        elif 80.0 <= max_time <= 100.0:
+            should_draw = True
+            phase_duration = 30.0
     elif draw_phases == "true":
         should_draw = True
+        phase_duration = 30.0 if max_time > 40.0 else 5.0
 
     if should_draw:
-        print("[INFO] Adding shaded regions for 3-phase masking (0-5s / 5-10s / 10-15s).")
-        ax.axvspan(0,  5,              color="#EE6677", alpha=0.08,
+        p1 = phase_duration
+        p2 = phase_duration * 2.0
+        p3 = phase_duration * 3.0
+        
+        print(f"[INFO] Adding shaded regions for 3-phase masking (0-{p1:.0f}s / {p1:.0f}-{p2:.0f}s / {p2:.0f}-{p3:.0f}s).")
+        ax.axvspan(0,  p1,              color="#EE6677", alpha=0.08,
                    label="Phase 1: Normal (Mask OFF)")
-        ax.axvspan(5,  10,             color="#228833", alpha=0.08,
+        ax.axvspan(p1,  p2,             color="#228833", alpha=0.08,
                    label="Phase 2: Active (Mask ON)")
-        ax.axvspan(10, min(15.0, max_time), color="#CCBB44", alpha=0.08,
+        ax.axvspan(p2, min(p3, max_time), color="#CCBB44", alpha=0.08,
                    label="Phase 3: Normal (Mask OFF)")
 
-        ax.axvline(x=5.0,  color="#666666", linestyle="--", linewidth=1.0, alpha=0.6, zorder=4)
-        ax.axvline(x=10.0, color="#666666", linestyle="--", linewidth=1.0, alpha=0.6, zorder=4)
+        ax.axvline(x=p1,  color="#666666", linestyle="--", linewidth=1.0, alpha=0.6, zorder=4)
+        ax.axvline(x=p2, color="#666666", linestyle="--", linewidth=1.0, alpha=0.6, zorder=4)
 
         y_top = ax.get_ylim()[1]
         text_y = y_top * 0.90
-        for xc, label in [(2.5, "Phase 1\nMask OFF"),
-                          (7.5, "Phase 2\nMask ON"),
-                          (12.5, "Phase 3\nMask OFF")]:
+        for xc, label in [(p1 / 2.0, "Phase 1\nMask OFF"),
+                          ((p1 + p2) / 2.0, "Phase 2\nMask ON"),
+                          ((p2 + p3) / 2.0, "Phase 3\nMask OFF")]:
             ax.text(xc, text_y, label, ha="center", va="center",
                     fontsize=9, color="#555555", weight="bold")
 
-        ax.set_xlim(0, max(15.0, max_time))
+        ax.set_xlim(0, max(p3, max_time))
 
     # --- Titles ---
     if not title:
@@ -349,7 +367,7 @@ CSV format (produced by metavision_evt3_raw_file_decoder):
         default="auto",
         help=(
             "Overlay 3-phase masking regions. "
-            "'auto' draws them when file duration is ~15 s."
+            "'auto' draws them when file duration is ~15 s or ~90 s."
         ),
     )
     parser.add_argument(
