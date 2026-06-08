@@ -1,5 +1,6 @@
 # Build directories
-/build/
+/build/*
+!/build/build.sh
 /cmake-build-*/
 /.venv/
 
