@@ -1,7 +1,7 @@
 #include <chrono>
 #include <cstring>
 #include <cstdlib>
-#include <fstream>
+
 #include <iostream>
 #include <sstream>
 #include <string>
@@ -442,13 +442,8 @@ int main(int argc, char *argv[])
   }
 #endif
 
-  // ---- 3. Open output file for RAW recording ----
-  std::ofstream raw_file(output_path, std::ios::binary | std::ios::trunc);
-  if (!raw_file.is_open())
-  {
-    std::cerr << "[ERROR] Failed to open output file: " << output_path << std::endl;
-    return 1;
-  }
+  // ---- 3. Start RAW file logging (writes EVT3 header automatically) ----
+  i_events_stream->log_raw_data(output_path);
   std::cout << "[INFO] Recording RAW data to: " << output_path << std::endl;
 
   // ---- 4. Start event stream ----
@@ -460,8 +455,6 @@ int main(int argc, char *argv[])
   bool mask_applied = false;
   bool mask_cleared = false;
   std::atomic<bool> running{true};
-  size_t total_bytes_written = 0;
-  size_t packet_count = 0;
 
   std::cout << "[INFO] Recording started (Total " << total_duration << " seconds)..." << std::endl;
   std::cout << "[PHASE 1] 0-" << mask_apply_time << "s: Warm-up (No Mask)" << std::endl;
@@ -478,26 +471,12 @@ int main(int argc, char *argv[])
 
     if (status > 0)
     {
-      // Retrieve the latest raw data buffer
+      // Retrieve and decode the latest raw data buffer.
+      // File writing is handled automatically by log_raw_data().
       auto raw_data = i_events_stream->get_latest_raw_data();
-      if (raw_data)
+      if (raw_data && i_stream_decoder)
       {
-        const auto *data_ptr = raw_data.data();
-        const size_t data_size = raw_data.size();
-
-        if (data_ptr && data_size > 0)
-        {
-          // Write raw packet directly to file
-          raw_file.write(reinterpret_cast<const char *>(data_ptr), data_size);
-          total_bytes_written += data_size;
-          ++packet_count;
-        }
-
-        // Also decode (keeps internal state consistent)
-        if (i_stream_decoder)
-        {
-          i_stream_decoder->decode(raw_data);
-        }
+        i_stream_decoder->decode(raw_data);
       }
     }
 
@@ -552,14 +531,11 @@ int main(int argc, char *argv[])
     std::this_thread::sleep_for(std::chrono::milliseconds(1));
   }
 
-  // ---- 6. Stop stream and close file ----
+  // ---- 6. Stop stream and close log file ----
   i_events_stream->stop();
-  raw_file.close();
+  i_events_stream->stop_log_raw_data();
 
   std::cout << "[INFO] Recording finished." << std::endl;
-  std::cout << "[INFO] Total packets: " << packet_count << std::endl;
-  std::cout << "[INFO] Total bytes written: " << total_bytes_written
-            << " (" << (total_bytes_written / 1024.0 / 1024.0) << " MB)" << std::endl;
   std::cout << "[INFO] Output file: " << output_path << std::endl;
 
   return 0;
