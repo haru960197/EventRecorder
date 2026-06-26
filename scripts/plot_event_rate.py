@@ -49,33 +49,19 @@ import numpy as np
 # Style Settings
 # ---------------------------------------------------------------------------
 def _apply_style() -> None:
-    """Apply SciencePlots style if available, otherwise use a clean fallback."""
-    try:
-        import scienceplots  # noqa: F401
-        plt.style.use(["science", "ieee", "no-latex"])
-        print("[INFO] Applied SciencePlots style.")
-    except (ImportError, OSError):
-        plt.rcParams.update({
-            "figure.figsize": (8, 4.8),
-            "figure.dpi": 150,
-            "axes.grid": True,
-            "axes.linewidth": 0.8,
-            "grid.alpha": 0.3,
-            "grid.linewidth": 0.5,
-            "font.size": 11,
-            "font.family": "serif",
-            "legend.fontsize": 9,
-            "legend.framealpha": 0.9,
-            "lines.linewidth": 1.8,
-            "lines.markersize": 5,
-            "xtick.direction": "in",
-            "ytick.direction": "in",
-            "xtick.major.width": 0.8,
-            "ytick.major.width": 0.8,
-            "savefig.bbox": "tight",
-            "savefig.pad_inches": 0.05,
-        })
-        print("[INFO] Applied fallback style (SciencePlots not installed).")
+    """Apply a clean, publication-ready style matching visualize_sync.py."""
+    plt.rcParams.update({
+        "figure.figsize": (8, 6),
+        "figure.dpi": 150,
+        "axes.grid": True,
+        "axes.linewidth": 0.8,
+        "grid.alpha": 0.5,
+        "grid.linewidth": 0.5,
+        "grid.linestyle": "--",
+        "lines.linewidth": 1.5,
+        "savefig.bbox": "tight",
+        "savefig.pad_inches": 0.05,
+    })
 
 
 # ---------------------------------------------------------------------------
@@ -252,14 +238,14 @@ def plot_event_rate(
     """
     _apply_style()
 
-    fig, ax = plt.subplots(figsize=(8.5, 5.0))
+    fig, ax = plt.subplots(figsize=(8, 6))
 
     # Main line + shaded area under curve
-    ax.plot(times, counts, color="#4477AA", linewidth=1.5, label="Event Rate", zorder=3)
-    ax.fill_between(times, counts, color="#4477AA", alpha=0.10, zorder=2)
+    ax.plot(times, counts, color="C0", linewidth=1.5, label="Event Rate", zorder=3)
+    ax.fill_between(times, counts, color="C0", alpha=0.10, zorder=2)
 
-    ax.set_xlabel("Time [s]")
-    ax.set_ylabel(f"Event Count (per {delta_t_ms:.0f} ms)")
+    ax.set_xlabel("Time [s]", fontsize=12)
+    ax.set_ylabel(f"Event Count (per {delta_t_ms:.0f} ms)", fontsize=12)
 
     # Y-axis: compact unit suffixes
     def _y_fmt(x, pos):
@@ -313,7 +299,7 @@ def plot_event_rate(
                           ((p1 + p2) / 2.0, "Phase 2\nMask ON"),
                           ((p2 + p3) / 2.0, "Phase 3\nMask OFF")]:
             ax.text(xc, text_y, label, ha="center", va="center",
-                    fontsize=9, color="#555555", weight="bold")
+                    fontsize=10, color="#555555", weight="bold")
 
         ax.set_xlim(0, max(p3, max_time))
 
@@ -323,16 +309,15 @@ def plot_event_rate(
 
     w, h = sensor_size
     res_str = f"{w}x{h}" if w and h else "unknown"
-    subtitle = f"File: {input_name} | Resolution: {res_str} | Bin: {delta_t_ms:.0f} ms"
-    fig.suptitle(title, fontsize=13, fontweight="bold", y=0.98)
-    ax.set_title(subtitle, fontsize=9, color="#666666", pad=10)
+    ax.set_title(f"{title}", fontsize=13)
 
-    ax.grid(True, linestyle="-", alpha=0.25, linewidth=0.5, zorder=1)
-    ax.legend(loc="upper right", framealpha=0.95, facecolor="#ffffff", edgecolor="#e0e0e0")
+    ax.grid(True, linestyle="--", alpha=0.5, linewidth=0.5, zorder=1)
+    ax.legend(fontsize=10, framealpha=0.8)
 
     # --- Save ---
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(output_path, dpi=dpi)
+    plt.tight_layout()
+    fig.savefig(output_path, dpi=dpi, bbox_inches="tight")
     plt.close(fig)
     print(f"[OK] Plot saved to: {output_path}")
 
