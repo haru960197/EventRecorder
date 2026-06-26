@@ -10,26 +10,9 @@ Reads a CSV event file in the format produced by metavision_evt3_raw_file_decode
 Calculates the number of events per time window (default: 100 ms) and plots
 the event rate over time as a line graph.
 
-By default, if the recording is ~15 seconds, ~40 seconds or ~90 seconds long
-(matching the event_recorder duration), the script automatically highlights
-the three dynamic masking phases:
-  - For ~15s recording:
-    - Phase 1 (0–5s): Mask OFF (Normal state)
-    - Phase 2 (5–10s): Mask ON (Hot pixel mask applied)
-    - Phase 3 (10–15s): Mask OFF (Mask cleared)
-  - For ~40s recording:
-    - Phase 1 (0–5s): Mask OFF (Normal state)
-    - Phase 2 (5–35s): Mask ON (Hot pixel mask applied)
-    - Phase 3 (35–40s): Mask OFF (Mask cleared)
-  - For ~90s recording:
-    - Phase 1 (0–30s): Mask OFF (Normal state)
-    - Phase 2 (30–60s): Mask ON (Hot pixel mask applied)
-    - Phase 3 (60–90s): Mask OFF (Mask cleared)
-
 Usage:
     python3 scripts/plot_event_rate.py events.csv -o event_rate.png
     python3 scripts/plot_event_rate.py events.csv -d 50 -o event_rate.png
-    python3 scripts/plot_event_rate.py events.csv --draw-phases true -o event_rate.png
 """
 
 from __future__ import annotations
@@ -207,9 +190,6 @@ def plot_event_rate(
     counts: np.ndarray,
     output_path: Path,
     delta_t_ms: float,
-    sensor_size: tuple[int, int],
-    input_name: str,
-    draw_phases: str = "auto",
     title: str | None = None,
     dpi: int = 300,
 ) -> None:
@@ -225,12 +205,6 @@ def plot_event_rate(
         Output PNG path.
     delta_t_ms : float
         Bin size in milliseconds (used for axis label).
-    sensor_size : tuple[int, int]
-        (width, height) for the subtitle.
-    input_name : str
-        Source filename for the subtitle.
-    draw_phases : str
-        'auto', 'true', or 'false'.
     title : str, optional
         Main plot title.
     dpi : int
@@ -257,58 +231,9 @@ def plot_event_rate(
 
     ax.yaxis.set_major_formatter(ticker.FuncFormatter(_y_fmt))
 
-    # --- Phase shading ---
-    max_time = times[-1] if len(times) > 0 else 0.0
-    should_draw = False
-    p1, p2, p3 = None, None, None
-
-    if draw_phases == "auto":
-        if 12.0 <= max_time <= 18.0:
-            should_draw = True
-            p1, p2, p3 = 5.0, 10.0, 15.0
-        elif 35.0 <= max_time <= 45.0:
-            should_draw = True
-            p1, p2, p3 = 5.0, 35.0, 40.0
-        elif 80.0 <= max_time <= 100.0:
-            should_draw = True
-            p1, p2, p3 = 30.0, 60.0, 90.0
-    elif draw_phases == "true":
-        should_draw = True
-        if max_time > 80.0:
-            p1, p2, p3 = 30.0, 60.0, 90.0
-        elif max_time > 35.0:
-            p1, p2, p3 = 5.0, 35.0, 40.0
-        else:
-            p1, p2, p3 = 5.0, 10.0, 15.0
-
-    if should_draw and p1 is not None and p2 is not None and p3 is not None:
-        print(f"[INFO] Adding shaded regions for 3-phase masking (0-{p1:.0f}s / {p1:.0f}-{p2:.0f}s / {p2:.0f}-{p3:.0f}s).")
-        ax.axvspan(0,  p1,              color="#EE6677", alpha=0.08,
-                   label="Phase 1: Normal (Mask OFF)")
-        ax.axvspan(p1,  p2,             color="#228833", alpha=0.08,
-                   label="Phase 2: Active (Mask ON)")
-        ax.axvspan(p2, min(p3, max_time), color="#CCBB44", alpha=0.08,
-                   label="Phase 3: Normal (Mask OFF)")
-
-        ax.axvline(x=p1,  color="#666666", linestyle="--", linewidth=1.0, alpha=0.6, zorder=4)
-        ax.axvline(x=p2, color="#666666", linestyle="--", linewidth=1.0, alpha=0.6, zorder=4)
-
-        y_top = ax.get_ylim()[1]
-        text_y = y_top * 0.90
-        for xc, label in [(p1 / 2.0, "Phase 1\nMask OFF"),
-                          ((p1 + p2) / 2.0, "Phase 2\nMask ON"),
-                          ((p2 + p3) / 2.0, "Phase 3\nMask OFF")]:
-            ax.text(xc, text_y, label, ha="center", va="center",
-                    fontsize=10, color="#555555", weight="bold")
-
-        ax.set_xlim(0, max(p3, max_time))
-
-    # --- Titles ---
+    # --- Title ---
     if not title:
         title = "Event Rate Time Series"
-
-    w, h = sensor_size
-    res_str = f"{w}x{h}" if w and h else "unknown"
     ax.set_title(f"{title}", fontsize=13)
 
     ax.grid(True, linestyle="--", alpha=0.5, linewidth=0.5, zorder=1)
@@ -355,15 +280,6 @@ CSV format (produced by metavision_evt3_raw_file_decoder):
         help="Bin size in milliseconds.",
     )
     parser.add_argument(
-        "--draw-phases",
-        choices=["auto", "true", "false"],
-        default="auto",
-        help=(
-            "Overlay 3-phase masking regions. "
-            "'auto' draws them when file duration is ~15 s, ~40 s, or ~90 s."
-        ),
-    )
-    parser.add_argument(
         "--title",
         help="Custom main title for the plot.",
     )
@@ -384,7 +300,7 @@ CSV format (produced by metavision_evt3_raw_file_decoder):
         sys.exit(1)
 
     # Load CSV
-    events, sensor_size = load_csv(input_path)
+    events, _ = load_csv(input_path)
 
     if len(events) == 0:
         print("[ERROR] No events parsed from file. Exiting.", file=sys.stderr)
@@ -399,9 +315,6 @@ CSV format (produced by metavision_evt3_raw_file_decoder):
         counts=counts,
         output_path=output_path,
         delta_t_ms=args.delta_t,
-        sensor_size=sensor_size,
-        input_name=input_path.name,
-        draw_phases=args.draw_phases,
         title=args.title,
         dpi=args.dpi,
     )
